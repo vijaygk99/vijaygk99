@@ -1,0 +1,36 @@
+selenium_recorder/
+│
+├── main.py                  # Entry point for the application
+│
+├── ui/
+│   ├── __init__.py
+│   ├── main_window.py       # Main Tkinter window setup
+│   ├── toolbar.py           # Recording control buttons
+│   ├── step_table.py        # Table for displaying recorded steps
+│   ├── settings_panel.py    # Configuration UI
+│   ├── preview_panel.py     # Screenshot preview
+│   └── log_panel.py         # Logging display
+│
+├── core/
+│   ├── __init__.py
+│   ├── recorder.py          # Main recording engine
+│   ├── browser_manager.py   # Browser session handling
+│   ├── locator_engine.py    # Element locator strategies
+│   └── script_generator.py  # Python code generation
+│
+├── utils/
+│   ├── __init__.py
+│   ├── logger.py            # Logging functionality
+│   ├── screenshot.py        # Screenshot capture and management
+│   ├── data_exporter.py     # JSON/CSV export/import
+│   └── config_manager.py    # Application settings
+│
+├── tests/                   # Unit and integration tests
+│   ├── __init__.py
+│   ├── test_recorder.py
+│   ├── test_locators.py
+│   └── test_script_gen.py
+│
+└── resources/               # Icons, templates, etc.
+    ├── icons/
+    └── templates/

@@ -1,0 +1,491 @@
+"""
+browser_utils.py - Browser utility functions for Selenium Recorder
+
+This module provides utility functions for browser-specific operations.
+"""
+
+import os
+import sys
+import platform
+import subprocess
+import shutil
+import tempfile
+import zipfile
+import urllib.request
+from typing import Dict, List, Any, Optional, Tuple
+import logging
+
+logger = logging.getLogger("BrowserUtils")
+
+class BrowserUtils:
+    """
+    Utility class for browser-specific operations.
+    """
+    
+    @staticmethod
+    def get_available_browsers() -> Dict[str, Dict[str, Any]]:
+        """
+        Get information about available browsers on the system.
+        
+        Returns:
+            Dictionary of browser information
+        """
+        browsers = {}
+        system = platform.system()
+        
+        # Chrome
+        chrome_path = BrowserUtils.find_browser("chrome")
+        if chrome_path:
+            browsers["chrome"] = {
+                "name": "Google Chrome",
+                "path": chrome_path,
+                "driver": "chromedriver",
+                "supports_headless": True
+            }
+            
+        # Firefox
+        firefox_path = BrowserUtils.find_browser("firefox")
+        if firefox_path:
+            browsers["firefox"] = {
+                "name": "Mozilla Firefox",
+                "path": firefox_path,
+                "driver": "geckodriver",
+                "supports_headless": True
+            }
+            
+        # Edge
+        edge_path = BrowserUtils.find_browser("edge")
+        if edge_path:
+            browsers["edge"] = {
+                "name": "Microsoft Edge",
+                "path": edge_path,
+                "driver": "msedgedriver",
+                "supports_headless": True
+            }
+            
+        # Safari (macOS only)
+        if system == "Darwin":
+            safari_path = BrowserUtils.find_browser("safari")
+            if safari_path:
+                browsers["safari"] = {
+                    "name": "Safari",
+                    "path": safari_path,
+                    "driver": "safaridriver",
+                    "supports_headless": False
+                }
+                
+        return browsers
+        
+    @staticmethod
+    def find_browser(browser_name: str) -> Optional[str]:
+        """
+        Find the path to a browser executable.
+        
+        Args:
+            browser_name: Name of browser (chrome, firefox, edge, safari)
+            
+        Returns:
+            Path to browser executable, or None if not found
+        """
+        system = platform.system()
+        
+        # Chrome
+        if browser_name.lower() == "chrome":
+            if system == "Windows":
+                paths = [
+                    os.path.join(os.environ.get("PROGRAMFILES", "C:\\Program Files"), "Google\\Chrome\\Application\\chrome.exe"),
+                    os.path.join(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)"), "Google\\Chrome\\Application\\chrome.exe"),
+                    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google\\Chrome\\Application\\chrome.exe")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            elif system == "Darwin":  # macOS
+                paths = [
+                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            elif system == "Linux":
+                paths = [
+                    "/usr/bin/google-chrome",
+                    "/usr/bin/google-chrome-stable",
+                    "/usr/bin/chromium",
+                    "/usr/bin/chromium-browser"
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+                        
+        # Firefox
+        elif browser_name.lower() == "firefox":
+            if system == "Windows":
+                paths = [
+                    os.path.join(os.environ.get("PROGRAMFILES", "C:\\Program Files"), "Mozilla Firefox\\firefox.exe"),
+                    os.path.join(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)"), "Mozilla Firefox\\firefox.exe")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            elif system == "Darwin":  # macOS
+                paths = [
+                    "/Applications/Firefox.app/Contents/MacOS/firefox",
+                    os.path.expanduser("~/Applications/Firefox.app/Contents/MacOS/firefox")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            elif system == "Linux":
+                paths = [
+                    "/usr/bin/firefox",
+                    "/usr/bin/firefox-esr"
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+                        
+        # Edge
+        elif browser_name.lower() == "edge":
+            if system == "Windows":
+                paths = [
+                    os.path.join(os.environ.get("PROGRAMFILES", "C:\\Program Files"), "Microsoft\\Edge\\Application\\msedge.exe"),
+                    os.path.join(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)"), "Microsoft\\Edge\\Application\\msedge.exe")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            elif system == "Darwin":  # macOS
+                paths = [
+                    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                    os.path.expanduser("~/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+            elif system == "Linux":
+                paths = [
+                    "/usr/bin/microsoft-edge",
+                    "/usr/bin/microsoft-edge-stable"
+                ]
+                for path in paths:
+                    if os.path.exists(path):
+                        return path
+                        
+        # Safari (macOS only)
+        elif browser_name.lower() == "safari" and system == "Darwin":
+            paths = [
+                "/Applications/Safari.app/Contents/MacOS/Safari"
+            ]
+            for path in paths:
+                if os.path.exists(path):
+                    return path
+                    
+        return None
+        
+    @staticmethod
+    def find_driver(browser_name: str) -> Optional[str]:
+        """
+        Find the path to a webdriver executable.
+        
+        Args:
+            browser_name: Name of browser (chrome, firefox, edge, safari)
+            
+        Returns:
+            Path to webdriver executable, or None if not found
+        """
+        system = platform.system()
+        driver_name = ""
+        
+        # Get driver name
+        if browser_name.lower() == "chrome":
+            driver_name = "chromedriver"
+        elif browser_name.lower() == "firefox":
+            driver_name = "geckodriver"
+        elif browser_name.lower() == "edge":
+            driver_name = "msedgedriver"
+        elif browser_name.lower() == "safari":
+            driver_name = "safaridriver"
+        else:
+            return None
+            
+        # Add .exe extension on Windows
+        if system == "Windows":
+            driver_name += ".exe"
+            
+        # Check PATH
+        path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+        for dir_path in path_dirs:
+            driver_path = os.path.join(dir_path, driver_name)
+            if os.path.exists(driver_path) and os.access(driver_path, os.X_OK):
+                return driver_path
+                
+        # Check common locations
+        if system == "Windows":
+            paths = [
+                os.path.join(os.environ.get("LOCALAPPDATA", ""), "SeleniumRecorder", "drivers", driver_name),
+                os.path.join(os.environ.get("APPDATA", ""), "SeleniumRecorder", "drivers", driver_name)
+            ]
+        elif system == "Darwin":  # macOS
+            paths = [
+                os.path.join(os.path.expanduser("~"), "Library", "Application Support", "SeleniumRecorder", "drivers", driver_name),
+                f"/usr/local/bin/{driver_name}"
+            ]
+        else:  # Linux
+            paths = [
+                os.path.join(os.path.expanduser("~"), ".local", "share", "SeleniumRecorder", "drivers", driver_name),
+                f"/usr/local/bin/{driver_name}"
+            ]
+            
+        for path in paths:
+            if os.path.exists(path) and os.access(path, os.X_OK):
+                return path
+                
+        return None
+        
+    @staticmethod
+    def download_driver(browser_name: str, version: Optional[str] = None) -> Optional[str]:
+        """
+        Download a webdriver for a browser.
+        
+        Args:
+            browser_name: Name of browser (chrome, firefox, edge)
+            version: Specific version to download (optional)
+            
+        Returns:
+            Path to downloaded driver, or None if download failed
+        """
+        system = platform.system()
+        machine = platform.machine().lower()
+        
+        # Create drivers directory
+        if system == "Windows":
+            drivers_dir = os.path.join(os.environ.get("LOCALAPPDATA", ""), "SeleniumRecorder", "drivers")
+        elif system == "Darwin":  # macOS
+            drivers_dir = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "SeleniumRecorder", "drivers")
+        else:  # Linux
+            drivers_dir = os.path.join(os.path.expanduser("~"), ".local", "share", "SeleniumRecorder", "drivers")
+            
+        os.makedirs(drivers_dir, exist_ok=True)
+        
+        # Chrome
+        if browser_name.lower() == "chrome":
+            driver_name = "chromedriver"
+            if system == "Windows":
+                driver_name += ".exe"
+                
+            driver_path = os.path.join(drivers_dir, driver_name)
+            
+            # TODO: Implement Chrome driver download logic
+            # This requires fetching the latest version from the Chrome driver website
+            # and downloading the appropriate binary for the platform
+            
+            return driver_path if os.path.exists(driver_path) else None
+            
+        # Firefox
+        elif browser_name.lower() == "firefox":
+            driver_name = "geckodriver"
+            if system == "Windows":
+                driver_name += ".exe"
+                
+            driver_path = os.path.join(drivers_dir, driver_name)
+            
+            # TODO: Implement Firefox driver download logic
+            
+            return driver_path if os.path.exists(driver_path) else None
+            
+        # Edge
+        elif browser_name.lower() == "edge":
+            driver_name = "msedgedriver"
+            if system == "Windows":
+                driver_name += ".exe"
+                
+            driver_path = os.path.join(drivers_dir, driver_name)
+            
+            # TODO: Implement Edge driver download logic
+            
+            return driver_path if os.path.exists(driver_path) else None
+            
+        return None
+        
+    @staticmethod
+    def get_browser_version(browser_path: str) -> Optional[str]:
+        """
+        Get the version of a browser.
+        
+        Args:
+            browser_path: Path to browser executable
+            
+        Returns:
+            Browser version, or None if unable to determine
+        """
+        if not os.path.exists(browser_path):
+            return None
+            
+        try:
+            system = platform.system()
+            
+            # Chrome, Edge
+            if "chrome" in browser_path.lower() or "edge" in browser_path.lower():
+                if system == "Windows":
+                    args = [browser_path, "--version"]
+                else:
+                    args = [browser_path, "--version"]
+                    
+                result = subprocess.run(args, capture_output=True, text=True)
+                if result.returncode == 0:
+                    output = result.stdout.strip()
+                    # Extract version number
+                    import re
+                    match = re.search(r'(\d+\.\d+\.\d+\.\d+)', output)
+                    if match:
+                        return match.group(1)
+                        
+            # Firefox
+            elif "firefox" in browser_path.lower():
+                if system == "Windows":
+                    args = [browser_path, "--version"]
+                else:
+                    args = [browser_path, "--version"]
+                    
+                result = subprocess.run(args, capture_output=True, text=True)
+                if result.returncode == 0:
+                    output = result.stdout.strip()
+                    # Extract version number
+                    import re
+                    match = re.search(r'(\d+\.\d+)', output)
+                    if match:
+                        return match.group(1)
+                        
+        except Exception as e:
+            logger.error(f"Error getting browser version: {str(e)}")
+            
+        return None
+        
+    @staticmethod
+    def highlight_element_js() -> str:
+        """
+        Get JavaScript code to highlight an element.
+        
+        Returns:
+            JavaScript code
+        """
+        return """
+        function highlightElement(element) {
+            if (!element) return;
+            
+            // Save original styles
+            const originalOutline = element.style.outline;
+            const originalBoxShadow = element.style.boxShadow;
+            const originalTransition = element.style.transition;
+            
+            // Apply highlight
+            element.style.outline = '2px solid red';
+            element.style.boxShadow = '0 0 10px rgba(255, 0, 0, 0.5)';
+            element.style.transition = 'all 0.3s';
+            
+            // Remove highlight after a delay
+            setTimeout(function() {
+                element.style.outline = originalOutline;
+                element.style.boxShadow = originalBoxShadow;
+                element.style.transition = originalTransition;
+            }, 1500);
+        }
+        
+        highlightElement(arguments[0]);
+        """
+        
+    @staticmethod
+    def get_element_info_js() -> str:
+        """
+        Get JavaScript code to extract element information.
+        
+        Returns:
+            JavaScript code
+        """
+        return """
+        function getElementInfo(element) {
+            if (!element) return null;
+            
+            // Basic element info
+            const info = {
+                tag_name: element.tagName ? element.tagName.toLowerCase() : '',
+                id: element.id || '',
+                name: element.name || '',
+                class_name: element.className || '',
+                type: element.type || '',
+                value: element.value || '',
+                checked: element.checked,
+                text: element.textContent ? element.textContent.trim().substring(0, 50) : '',
+                xpath: getXPath(element)
+            };
+            
+            // Get attributes
+            info.attributes = {};
+            for (let i = 0; i < element.attributes.length; i++) {
+                const attr = element.attributes[i];
+                info.attributes[attr.name] = attr.value;
+            }
+            
+            // Special handling for different element types
+            if (element.tagName === 'SELECT') {
+                info.options = [];
+                for (let i = 0; i < element.options.length; i++) {
+                    const option = element.options[i];
+                    info.options.push({
+                        value: option.value,
+                        text: option.text,
+                        selected: option.selected
+                    });
+                }
+                
+                // Get selected options
+                info.selected_options = [];
+                for (let i = 0; i < element.selectedOptions.length; i++) {
+                    const option = element.selectedOptions[i];
+                    info.selected_options.push({
+                        value: option.value,
+                        text: option.text
+                    });
+                }
+            }
+            
+            return info;
+        }
+        
+        function getXPath(element) {
+            if (!element) return '';
+            
+            // Try to get ID-based XPath first (most reliable)
+            if (element.id) {
+                return `//*[@id="${element.id}"]`;
+            }
+            
+            // Get XPath by traversing the DOM
+            const paths = [];
+            let current = element;
+            
+            while (current && current.nodeType === Node.ELEMENT_NODE) {
+                let index = 0;
+                let sibling = current.previousSibling;
+                
+                while (sibling) {
+                    if (sibling.nodeType === Node.ELEMENT_NODE && sibling.tagName === current.tagName) {
+                        index++;
+                    }
+                    sibling = sibling.previousSibling;
+                }
+                
+                const tagName = current.tagName.toLowerCase();
+                const pathIndex = index === 0 ? '' : `[${index + 1}]`;
+                paths.unshift(`${tagName}${pathIndex}`);
+                
+                current = current.parentNode;
+            }
+            
+            return '/' + paths.join('/');
+        }
+        
+        return getElementInfo(arguments[0]);
+        """

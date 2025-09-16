@@ -1,0 +1,759 @@
+/**
+ * recorder_injection.js - JavaScript code injected into the browser for recording
+ * 
+ * This script captures user interactions with the page and sends them
+ * back to the Selenium Recorder application.
+ */
+
+(function() {
+    // Recorder namespace to avoid conflicts
+    window.SeleniumRecorder = window.SeleniumRecorder || {};
+    
+    // Check if recorder is already initialized
+    if (window.SeleniumRecorder.initialized) {
+        console.log("Selenium Recorder already initialized");
+        return;
+    }
+    
+    // Initialize recorder
+    const recorder = {
+        initialized: true,
+        recording: false,
+        events: [],
+        config: {
+            recordClicks: true,
+            recordInputs: true,
+            recordSelects: true,
+            recordHovers: true,
+            recordKeyboard: true,
+            smartDetection: true
+        },
+        
+        /**
+         * Start recording user interactions
+         */
+        start: function(config) {
+            if (this.recording) {
+                console.log("Recording already started");
+                return;
+            }
+            
+            // Update config if provided
+            if (config) {
+                Object.assign(this.config, config);
+            }
+            
+            // Clear events
+            this.events = [];
+            
+            // Set recording flag
+            this.recording = true;
+            
+            // Attach event listeners
+            this._attachEventListeners();
+            
+            console.log("Recording started");
+            
+            // Send start event
+            this._sendMessage({
+                type: "recording_started",
+                url: window.location.href,
+                title: document.title,
+                timestamp: Date.now()
+            });
+        },
+        
+        /**
+         * Stop recording user interactions
+         */
+        stop: function() {
+            if (!this.recording) {
+                console.log("Recording not started");
+                return;
+            }
+            
+            // Set recording flag
+            this.recording = false;
+            
+            // Detach event listeners
+            this._detachEventListeners();
+            
+            console.log("Recording stopped");
+            
+            // Send stop event
+            this._sendMessage({
+                type: "recording_stopped",
+                url: window.location.href,
+                timestamp: Date.now(),
+                eventCount: this.events.length
+            });
+        },
+        
+        /**
+         * Attach event listeners to capture user interactions
+         */
+        _attachEventListeners: function() {
+            // Click events
+            if (this.config.recordClicks) {
+                document.addEventListener("click", this._handleClick.bind(this), true);
+                document.addEventListener("dblclick", this._handleDoubleClick.bind(this), true);
+                document.addEventListener("contextmenu", this._handleRightClick.bind(this), true);
+            }
+            
+            // Input events
+            if (this.config.recordInputs) {
+                document.addEventListener("change", this._handleChange.bind(this), true);
+                document.addEventListener("input", this._handleInput.bind(this), true);
+            }
+            
+            // Hover events
+            if (this.config.recordHovers) {
+                document.addEventListener("mouseover", this._handleMouseOver.bind(this), true);
+            }
+            
+            // Keyboard events
+            if (this.config.recordKeyboard) {
+                document.addEventListener("keydown", this._handleKeyDown.bind(this), true);
+            }
+            
+            // Navigation events
+            window.addEventListener("beforeunload", this._handleBeforeUnload.bind(this));
+            
+            // Override history methods
+            this._overrideHistoryMethods();
+        },
+        
+        /**
+         * Detach event listeners
+         */
+        _detachEventListeners: function() {
+            // Click events
+            document.removeEventListener("click", this._handleClick.bind(this), true);
+            document.removeEventListener("dblclick", this._handleDoubleClick.bind(this), true);
+            document.removeEventListener("contextmenu", this._handleRightClick.bind(this), true);
+            
+            // Input events
+            document.removeEventListener("change", this._handleChange.bind(this), true);
+            document.removeEventListener("input", this._handleInput.bind(this), true);
+            
+            // Hover events
+            document.removeEventListener("mouseover", this._handleMouseOver.bind(this), true);
+            
+            // Keyboard events
+            document.removeEventListener("keydown", this._handleKeyDown.bind(this), true);
+            
+            // Navigation events
+            window.removeEventListener("beforeunload", this._handleBeforeUnload.bind(this));
+        },
+        
+        /**
+         * Override history methods to capture navigation
+         */
+        _overrideHistoryMethods: function() {
+            const originalPushState = history.pushState;
+            const originalReplaceState = history.replaceState;
+            const self = this;
+            
+            history.pushState = function() {
+                originalPushState.apply(this, arguments);
+                self._handleNavigation("pushState");
+            };
+            
+            history.replaceState = function() {
+                originalReplaceState.apply(this, arguments);
+                self._handleNavigation("replaceState");
+            };
+        },
+        
+        /**
+         * Handle navigation events
+         */
+        _handleNavigation: function(method) {
+            if (!this.recording) return;
+            
+            const eventData = {
+                type: "navigate",
+                timestamp: Date.now(),
+                url: window.location.href,
+                title: document.title,
+                method: method
+            };
+            
+            this.events.push(eventData);
+            this._sendMessage(eventData);
+        },
+        
+        /**
+         * Handle beforeunload event
+         */
+        _handleBeforeUnload: function(event) {
+            if (!this.recording) return;
+            
+            const eventData = {
+                type: "navigate",
+                timestamp: Date.now(),
+                url: window.location.href,
+                title: document.title,
+                method: "unload"
+            };
+            
+            this.events.push(eventData);
+            this._sendMessage(eventData);
+        },
+        
+        /**
+         * Handle click events
+         */
+        _handleClick: function(event) {
+            if (!this.recording) return;
+            
+            // Ignore if target is not an element
+            if (!event.target || event.target.nodeType !== 1) return;
+            
+            // Get element info
+            const elementInfo = this._getElementInfo(event.target);
+            
+            // Create event data
+            const eventData = {
+                type: "click",
+                timestamp: Date.now(),
+                url: window.location.href,
+                element: elementInfo,
+                locators: this._generateLocators(event.target)
+            };
+            
+            // Add to events
+            this.events.push(eventData);
+            
+            // Send event
+            this._sendMessage(eventData);
+        },
+        /**
+         * Handle double click events
+         */
+        _handleDoubleClick: function(event) {
+            if (!this.recording) return;
+            
+            // Ignore if target is not an element
+            if (!event.target || event.target.nodeType !== 1) return;
+            
+            // Get element info
+            const elementInfo = this._getElementInfo(event.target);
+            
+            // Create event data
+            const eventData = {
+                type: "double_click",
+                timestamp: Date.now(),
+                url: window.location.href,
+                element: elementInfo,
+                locators: this._generateLocators(event.target)
+            };
+            
+            // Add to events
+            this.events.push(eventData);
+            
+            // Send event
+            this._sendMessage(eventData);
+        },
+        
+        /**
+         * Handle right click events
+         */
+        _handleRightClick: function(event) {
+            if (!this.recording) return;
+            
+            // Ignore if target is not an element
+            if (!event.target || event.target.nodeType !== 1) return;
+            
+            // Get element info
+            const elementInfo = this._getElementInfo(event.target);
+            
+            // Create event data
+            const eventData = {
+                type: "right_click",
+                timestamp: Date.now(),
+                url: window.location.href,
+                element: elementInfo,
+                locators: this._generateLocators(event.target)
+            };
+            
+            // Add to events
+            this.events.push(eventData);
+            
+            // Send event
+            this._sendMessage(eventData);
+        },
+        
+        /**
+         * Handle input events
+         */
+        _handleInput: function(event) {
+            if (!this.recording) return;
+            
+            // Ignore if target is not an input element
+            if (!event.target || !this._isInputElement(event.target)) return;
+            
+            // Get element info
+            const elementInfo = this._getElementInfo(event.target);
+            
+            // Get input value
+            let value = this._getElementValue(event.target);
+            
+            // Create event data
+            const eventData = {
+                type: "input",
+                timestamp: Date.now(),
+                url: window.location.href,
+                element: elementInfo,
+                value: value,
+                locators: this._generateLocators(event.target)
+            };
+            
+            // Add to events
+            this.events.push(eventData);
+            
+            // Send event
+            this._sendMessage(eventData);
+        },
+        
+        /**
+         * Handle change events
+         */
+        _handleChange: function(event) {
+            if (!this.recording) return;
+            
+            // Ignore if target is not an input element
+            if (!event.target || !this._isInputElement(event.target)) return;
+            
+            // Get element info
+            const elementInfo = this._getElementInfo(event.target);
+            
+            // Handle different input types
+            if (event.target.tagName === "SELECT") {
+                // Handle select elements
+                const selectedOptions = Array.from(event.target.selectedOptions).map(option => {
+                    return {
+                        value: option.value,
+                        text: option.text
+                    };
+                });
+                
+                // Create event data
+                const eventData = {
+                    type: "select",
+                    timestamp: Date.now(),
+                    url: window.location.href,
+                    element: elementInfo,
+                    selectedOptions: selectedOptions,
+                    locators: this._generateLocators(event.target)
+                };
+                
+                // Add to events
+                this.events.push(eventData);
+                
+                // Send event
+                this._sendMessage(eventData);
+            } else if (event.target.type === "checkbox" || event.target.type === "radio") {
+                // Handle checkbox and radio elements
+                const eventData = {
+                    type: event.target.checked ? "check" : "uncheck",
+                    timestamp: Date.now(),
+                    url: window.location.href,
+                    element: elementInfo,
+                    locators: this._generateLocators(event.target)
+                };
+                
+                // Add to events
+                this.events.push(eventData);
+                
+                // Send event
+                this._sendMessage(eventData);
+            }
+        },
+        
+        /**
+         * Handle mouse over events
+         */
+        _handleMouseOver: function(event) {
+            if (!this.recording) return;
+            
+            // Ignore if target is not an element
+            if (!event.target || event.target.nodeType !== 1) return;
+            
+            // Implement debouncing to avoid too many events
+            if (this._lastHoverTime && Date.now() - this._lastHoverTime < 1000) {
+                return;
+            }
+            
+            this._lastHoverTime = Date.now();
+            
+            // Get element info
+            const elementInfo = this._getElementInfo(event.target);
+            
+            // Create event data
+            const eventData = {
+                type: "hover",
+                timestamp: Date.now(),
+                url: window.location.href,
+                element: elementInfo,
+                locators: this._generateLocators(event.target)
+            };
+            
+            // Add to events
+            this.events.push(eventData);
+            
+            // Send event
+            this._sendMessage(eventData);
+        },
+        /**
+         * Handle key down events
+         */
+        _handleKeyDown: function(event) {
+            if (!this.recording) return;
+            
+            // Only record special keys
+            if (!this._isSpecialKey(event.key)) return;
+            
+            // Get element info
+            const elementInfo = this._getElementInfo(event.target);
+            
+            // Create event data
+            const eventData = {
+                type: "press_key",
+                timestamp: Date.now(),
+                url: window.location.href,
+                element: elementInfo,
+                key: this._mapKeyToSelenium(event.key),
+                locators: this._generateLocators(event.target)
+            };
+            
+            // Add to events
+            this.events.push(eventData);
+            
+            // Send event
+            this._sendMessage(eventData);
+        },
+        
+        /**
+         * Check if a key is a special key
+         */
+        _isSpecialKey: function(key) {
+            const specialKeys = [
+                "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", 
+                "ArrowLeft", "ArrowRight", "Backspace", "Delete",
+                "Home", "End", "PageUp", "PageDown"
+            ];
+            
+            return specialKeys.includes(key);
+        },
+        
+        /**
+         * Map browser key to Selenium key
+         */
+        _mapKeyToSelenium: function(key) {
+            const keyMap = {
+                "Enter": "ENTER",
+                "Tab": "TAB",
+                "Escape": "ESCAPE",
+                "ArrowUp": "ARROW_UP",
+                "ArrowDown": "ARROW_DOWN",
+                "ArrowLeft": "ARROW_LEFT",
+                "ArrowRight": "ARROW_RIGHT",
+                "Backspace": "BACK_SPACE",
+                "Delete": "DELETE",
+                "Home": "HOME",
+                "End": "END",
+                "PageUp": "PAGE_UP",
+                "PageDown": "PAGE_DOWN"
+            };
+            
+            return keyMap[key] || key;
+        },
+        
+        /**
+         * Check if an element is an input element
+         */
+        _isInputElement: function(element) {
+            const inputTags = ["INPUT", "TEXTAREA", "SELECT"];
+            return inputTags.includes(element.tagName);
+        },
+        
+        /**
+         * Get information about an element
+         */
+        _getElementInfo: function(element) {
+            return {
+                tag_name: element.tagName.toLowerCase(),
+                id: element.id,
+                name: element.name,
+                class_name: element.className,
+                type: element.type,
+                value: this._getElementValue(element),
+                text: this._getElementText(element),
+                attributes: this._getElementAttributes(element),
+                xpath: this._getXPath(element)
+            };
+        },
+        
+        /**
+         * Get element value
+         */
+        _getElementValue: function(element) {
+            if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
+                return element.value;
+            } else if (element.tagName === "SELECT") {
+                return Array.from(element.selectedOptions).map(option => option.value);
+            }
+            
+            return null;
+        },
+        
+        /**
+         * Get element text
+         */
+        _getElementText: function(element) {
+            // Get visible text
+            const text = element.innerText || element.textContent;
+            
+            // Trim and limit length
+            return text ? text.trim().substring(0, 100) : "";
+        },
+        
+        /**
+         * Get element attributes
+         */
+        _getElementAttributes: function(element) {
+            const attributes = {};
+            
+            // Get all attributes
+            for (let i = 0; i < element.attributes.length; i++) {
+                const attr = element.attributes[i];
+                attributes[attr.name] = attr.value;
+            }
+            
+            return attributes;
+        },
+        
+        /**
+         * Generate locators for an element
+         */
+        _generateLocators: function(element) {
+            const locators = {};
+            
+            // ID locator
+            if (element.id) {
+                locators.id = element.id;
+            }
+            
+            // Name locator
+            if (element.name) {
+                locators.name = element.name;
+            }
+            
+            // CSS selector
+            locators.css = this._generateCssSelector(element);
+            
+            // XPath locators
+            locators.xpath = {
+                id_based: this._generateIdBasedXPath(element),
+                attributes: this._generateAttributesXPath(element),
+                text: this._generateTextXPath(element),
+                full: this._getXPath(element)
+            };
+            
+            // Link text
+            if (element.tagName === "A" && element.innerText) {
+                locators.link_text = element.innerText.trim();
+            }
+            
+            return locators;
+        },
+        /**
+         * Generate CSS selector for an element
+         */
+        _generateCssSelector: function(element) {
+            // Try ID
+            if (element.id) {
+                return `#${element.id}`;
+            }
+            
+            // Try unique class
+            if (element.className) {
+                const classes = element.className.split(/\s+/).filter(c => c);
+                for (const className of classes) {
+                    const elements = document.getElementsByClassName(className);
+                    if (elements.length === 1) {
+                        return `.${className}`;
+                    }
+                }
+            }
+            
+            // Try name attribute
+            if (element.name) {
+                const elements = document.getElementsByName(element.name);
+                if (elements.length === 1) {
+                    return `[name="${element.name}"]`;
+                }
+            }
+            
+            // Generate path
+            let current = element;
+            let path = [];
+            
+            while (current && current !== document.documentElement) {
+                let selector = current.tagName.toLowerCase();
+                
+                if (current.id) {
+                    selector += `#${current.id}`;
+                    path.unshift(selector);
+                    break;
+                } else {
+                    let sibling = current;
+                    let nth = 1;
+                    
+                    while (sibling = sibling.previousElementSibling) {
+                        if (sibling.tagName === current.tagName) {
+                            nth++;
+                        }
+                    }
+                    
+                    if (nth > 1) {
+                        selector += `:nth-of-type(${nth})`;
+                    }
+                    
+                    path.unshift(selector);
+                    current = current.parentElement;
+                }
+            }
+            
+            return path.join(" > ");
+        },
+        
+        /**
+         * Generate ID-based XPath for an element
+         */
+        _generateIdBasedXPath: function(element) {
+            if (element.id) {
+                return `//*[@id="${element.id}"]`;
+            }
+            
+            return null;
+        },
+        
+        /**
+         * Generate attributes-based XPath for an element
+         */
+        _generateAttributesXPath: function(element) {
+            // Try with name
+            if (element.name) {
+                return `//${element.tagName.toLowerCase()}[@name="${element.name}"]`;
+            }
+            
+            // Try with class
+            if (element.className) {
+                return `//${element.tagName.toLowerCase()}[@class="${element.className}"]`;
+            }
+            
+            // Try with other attributes
+            for (const attr of ["type", "placeholder", "title", "data-testid"]) {
+                if (element.hasAttribute(attr)) {
+                    return `//${element.tagName.toLowerCase()}[@${attr}="${element.getAttribute(attr)}"]`;
+                }
+            }
+            
+            return null;
+        },
+        
+        /**
+         * Generate text-based XPath for an element
+         */
+        _generateTextXPath: function(element) {
+            const text = this._getElementText(element);
+            
+            if (text) {
+                return `//${element.tagName.toLowerCase()}[text()="${text}"]`;
+            }
+            
+            return null;
+        },
+        
+        /**
+         * Get full XPath for an element
+         */
+        _getXPath: function(element) {
+            if (element.id) {
+                return `//*[@id="${element.id}"]`;
+            }
+            
+            let path = "";
+            let current = element;
+            
+            while (current && current.nodeType === 1) {
+                let index = 1;
+                let sibling = current.previousSibling;
+                
+                while (sibling) {
+                    if (sibling.nodeType === 1 && sibling.tagName === current.tagName) {
+                        index++;
+                    }
+                    sibling = sibling.previousSibling;
+                }
+                
+                const tagName = current.tagName.toLowerCase();
+                const pathIndex = index > 1 ? `[${index}]` : "";
+                
+                path = `/${tagName}${pathIndex}${path}`;
+                current = current.parentNode;
+            }
+            
+            return path;
+        },
+        
+        /**
+         * Send message to Python application
+         */
+        _sendMessage: function(data) {
+            // Create custom event
+            const event = new CustomEvent("selenium_recorder_event", {
+                detail: JSON.stringify(data)
+            });
+            
+            // Dispatch event
+            document.dispatchEvent(event);
+        }
+    };
+    
+    // Expose recorder to window
+    window.SeleniumRecorder = recorder;
+    window.SeleniumRecorder.initialized = true;
+    
+    // Listen for messages from Python application
+    document.addEventListener("selenium_recorder_command", function(event) {
+        try {
+            const command = JSON.parse(event.detail);
+            
+            if (command.action === "start") {
+                recorder.start(command.config);
+            } else if (command.action === "stop") {
+                recorder.stop();
+            } else if (command.action === "get_events") {
+                recorder._sendMessage({
+                    type: "events",
+                    events: recorder.events
+                });
+            }
+        } catch (e) {
+            console.error("Error processing command:", e);
+        }
+    });
+    
+    // Send ready message
+    recorder._sendMessage({
+        type: "ready",
+        url: window.location.href,
+        title: document.title,
+        timestamp: Date.now()
+    });
+    
+    console.log("Selenium Recorder injected");
+})();

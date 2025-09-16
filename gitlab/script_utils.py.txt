@@ -1,0 +1,403 @@
+"""
+script_utils.py - Script generation utility functions for Selenium Recorder
+
+This module provides utility functions for generating test scripts from recorded steps.
+"""
+
+import os
+import re
+from typing import Dict, List, Any, Optional
+import logging
+
+logger = logging.getLogger("ScriptUtils")
+
+class ScriptUtils:
+    """
+    Utility class for script generation.
+    """
+    
+    # Template directories
+    TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "templates")
+    
+    @staticmethod
+    def get_available_frameworks() -> Dict[str, Dict[str, Any]]:
+        """
+        Get information about available test frameworks.
+        
+        Returns:
+            Dictionary of framework information
+        """
+        return {
+            "selenium": {
+                "name": "Selenium WebDriver",
+                "language": "python",
+                "description": "Standard Selenium WebDriver script",
+                "supports_assertions": True,
+                "file_extension": ".py"
+            },
+            "playwright": {
+                "name": "Playwright",
+                "language": "python",
+                "description": "Microsoft Playwright automation script",
+                "supports_assertions": True,
+                "file_extension": ".py"
+            },
+            "cypress": {
+                "name": "Cypress",
+                "language": "javascript",
+                "description": "Cypress E2E testing script",
+                "supports_assertions": True,
+                "file_extension": ".js"
+            },
+            "puppeteer": {
+                "name": "Puppeteer",
+                "language": "javascript",
+                "description": "Google Puppeteer automation script",
+                "supports_assertions": True,
+                "file_extension": ".js"
+            }
+        }
+        
+    @staticmethod
+    def get_available_test_frameworks() -> Dict[str, Dict[str, Any]]:
+        """
+        Get information about available test frameworks.
+        
+        Returns:
+            Dictionary of test framework information
+        """
+        return {
+            "pytest": {
+                "name": "pytest",
+                "language": "python",
+                "description": "Python pytest framework",
+                "file_extension": ".py"
+            },
+            "unittest": {
+                "name": "unittest",
+                "language": "python",
+                "description": "Python standard unittest framework",
+                "file_extension": ".py"
+            },
+            "jest": {
+                "name": "Jest",
+                "language": "javascript",
+                "description": "JavaScript Jest testing framework",
+                "file_extension": ".js"
+            },
+            "mocha": {
+                "name": "Mocha",
+                "language": "javascript",
+                "description": "JavaScript Mocha testing framework",
+                "file_extension": ".js"
+            }
+        }
+        
+    @staticmethod
+    def get_template_path(framework: str, test_framework: Optional[str] = None) -> str:
+        """
+        Get the path to a script template.
+        
+        Args:
+            framework: Automation framework (selenium, playwright, etc.)
+            test_framework: Test framework (pytest, unittest, etc.)
+            
+        Returns:
+            Path to template file
+        """
+        if test_framework:
+            template_name = f"{framework}_{test_framework}_template.txt"
+        else:
+            template_name = f"{framework}_template.txt"
+            
+        template_path = os.path.join(ScriptUtils.TEMPLATE_DIR, template_name)
+        
+        if not os.path.exists(template_path):
+            logger.warning(f"Template not found: {template_path}")
+            # Fall back to basic template
+            template_path = os.path.join(ScriptUtils.TEMPLATE_DIR, f"{framework}_template.txt")
+            
+        return template_path
+        
+    @staticmethod
+    def load_template(framework: str, test_framework: Optional[str] = None) -> str:
+        """
+        Load a script template.
+        
+        Args:
+            framework: Automation framework (selenium, playwright, etc.)
+            test_framework: Test framework (pytest, unittest, etc.)
+            
+        Returns:
+            Template content
+        """
+        template_path = ScriptUtils.get_template_path(framework, test_framework)
+        
+        try:
+            with open(template_path, 'r') as f:
+                return f.read()
+        except Exception as e:
+            logger.error(f"Error loading template: {str(e)}")
+            return ""
+            
+    @staticmethod
+    def format_step_comment(step: Dict[str, Any]) -> str:
+        """
+        Format a comment for a step.
+        
+        Args:
+            step: Step data
+            
+        Returns:
+            Formatted comment
+        """
+        action = step.get("action", "")
+        
+        if action == "navigate":
+            url = step.get("url", "")
+            return f"Navigate to {url}"
+            
+        elif action == "click":
+            element_info = step.get("element_info", {})
+            tag_name = element_info.get("tag_name", "element")
+            element_text = element_info.get("text", "")
+            element_id = element_info.get("id", "")
+            
+            if element_text:
+                return f"Click on {tag_name} with text '{element_text}'"
+            elif element_id:
+                return f"Click on {tag_name} with id '{element_id}'"
+            else:
+                return f"Click on {tag_name}"
+                
+        elif action == "double_click":
+            element_info = step.get("element_info", {})
+            tag_name = element_info.get("tag_name", "element")
+            element_text = element_info.get("text", "")
+            
+            if element_text:
+                return f"Double-click on {tag_name} with text '{element_text}'"
+            else:
+                return f"Double-click on {tag_name}"
+                
+        elif action == "right_click":
+            element_info = step.get("element_info", {})
+            tag_name = element_info.get("tag_name", "element")
+            element_text = element_info.get("text", "")
+            
+            if element_text:
+                return f"Right-click on {tag_name} with text '{element_text}'"
+            else:
+                return f"Right-click on {tag_name}"
+                
+        elif action == "input":
+            element_info = step.get("element_info", {})
+            tag_name = element_info.get("tag_name", "element")
+            value = step.get("value", "")
+            
+            return f"Input '{value}' into {tag_name}"
+            
+        elif action == "select":
+            element_info = step.get("element_info", {})
+            tag_name = element_info.get("tag_name", "select")
+            selected_options = step.get("selected_options", [])
+            
+            if selected_options:
+                option_texts = [opt.get("text", "") for opt in selected_options]
+                return f"Select option(s) '{', '.join(option_texts)}' from {tag_name}"
+            else:
+                return f"Select option from {tag_name}"
+                
+        elif action == "check":
+            element_info = step.get("element_info", {})
+            tag_name = element_info.get("tag_name", "checkbox")
+            
+            return f"Check {tag_name}"
+            
+        elif action == "uncheck":
+            element_info = step.get("element_info", {})
+            tag_name = element_info.get("tag_name", "checkbox")
+            
+            return f"Uncheck {tag_name}"
+            
+        elif action == "press_key":
+            key = step.get("key", "")
+            return f"Press key {key}"
+            
+        elif action == "hover":
+            element_info = step.get("element_info", {})
+            tag_name = element_info.get("tag_name", "element")
+            element_text = element_info.get("text", "")
+            
+            if element_text:
+                return f"Hover over {tag_name} with text '{element_text}'"
+            else:
+                return f"Hover over {tag_name}"
+                
+        elif action == "wait":
+            wait_type = step.get("wait_type", "time")
+            wait_value = step.get("wait_value", "")
+            
+            if wait_type == "time":
+                return f"Wait for {wait_value} seconds"
+            elif wait_type == "element":
+                return f"Wait for element to be present"
+            elif wait_type == "page_load":
+                return f"Wait for page to load"
+            else:
+                return f"Wait for {wait_type}"
+                
+        else:
+            return f"Perform {action}"
+            
+    @staticmethod
+    def format_python_string(value: str) -> str:
+        """
+        Format a string for Python code.
+        
+        Args:
+            value: String value
+            
+        Returns:
+            Formatted string
+        """
+        # Escape special characters
+        value = value.replace("\\", "\\\\")
+        value = value.replace("'", "\\'")
+        value = value.replace("\n", "\\n")
+        value = value.replace("\r", "\\r")
+        value = value.replace("\t", "\\t")
+        
+        return f"'{value}'"
+        
+    @staticmethod
+    def format_js_string(value: str) -> str:
+        """
+        Format a string for JavaScript code.
+        
+        Args:
+            value: String value
+            
+        Returns:
+            Formatted string
+        """
+        # Escape special characters
+        value = value.replace("\\", "\\\\")
+        value = value.replace('"', '\\"')
+        value = value.replace("\n", "\\n")
+        value = value.replace("\r", "\\r")
+        value = value.replace("\t", "\\t")
+        
+        return f'"{value}"'
+        
+    @staticmethod
+    def format_variable_name(name: str) -> str:
+        """
+        Format a string as a valid variable name.
+        
+        Args:
+            name: String to format
+            
+        Returns:
+            Formatted variable name
+        """
+        # Replace non-alphanumeric characters with underscore
+        name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+        
+        # Ensure name starts with a letter or underscore
+        if name and not name[0].isalpha() and name[0] != '_':
+            name = 'var_' + name
+            
+        # Ensure name is not empty
+        if not name:
+            name = 'variable'
+            
+        return name
+        
+    @staticmethod
+    def get_locator_strategy(locator_type: str, framework: str) -> str:
+        """
+        Get the locator strategy for a framework.
+        
+        Args:
+            locator_type: Type of locator (id, name, xpath, css, etc.)
+            framework: Automation framework (selenium, playwright, etc.)
+            
+        Returns:
+            Locator strategy string
+        """
+        # Selenium locator strategies
+        if framework == "selenium":
+            locator_map = {
+                "id": "By.ID",
+                "name": "By.NAME",
+                "class_name": "By.CLASS_NAME",
+                "tag_name": "By.TAG_NAME",
+                "link_text": "By.LINK_TEXT",
+                "partial_link_text": "By.PARTIAL_LINK_TEXT",
+                "xpath": "By.XPATH",
+                "css": "By.CSS_SELECTOR"
+            }
+            return locator_map.get(locator_type, "By.CSS_SELECTOR")
+            
+        # Playwright locator strategies
+        elif framework == "playwright":
+            locator_map = {
+                "id": "page.locator('#{}')".format,
+                "xpath": "page.locator('xpath={}')".format,
+                "css": "page.locator('{}')".format,
+                "text": "page.locator('text={}')".format
+            }
+            
+            if locator_type == "id":
+                return locator_map["id"]
+            elif locator_type == "xpath":
+                return locator_map["xpath"]
+            elif locator_type in ["link_text", "partial_link_text"]:
+                return locator_map["text"]
+            else:
+                return locator_map["css"]
+                
+        # Cypress locator strategies
+        elif framework == "cypress":
+            locator_map = {
+                "id": "cy.get('#{}')".format,
+                "name": "cy.get('[name=\"{}\"]')".format,
+                "class_name": "cy.get('.{}')".format,
+                "tag_name": "cy.get('{}')".format,
+                "xpath": "cy.xpath('{}')".format,
+                "css": "cy.get('{}')".format,
+                "text": "cy.contains('{}')".format
+            }
+            
+            if locator_type == "id":
+                return locator_map["id"]
+            elif locator_type == "name":
+                return locator_map["name"]
+            elif locator_type == "class_name":
+                return locator_map["class_name"]
+            elif locator_type == "tag_name":
+                return locator_map["tag_name"]
+            elif locator_type == "xpath":
+                return locator_map["xpath"]
+            elif locator_type in ["link_text", "partial_link_text"]:
+                return locator_map["text"]
+            else:
+                return locator_map["css"]
+                
+        # Puppeteer locator strategies
+        elif framework == "puppeteer":
+            locator_map = {
+                "id": "page.waitForSelector('#{}')".format,
+                "xpath": "page.waitForXPath('{}')".format,
+                "css": "page.waitForSelector('{}')".format
+            }
+            
+            if locator_type == "id":
+                return locator_map["id"]
+            elif locator_type == "xpath":
+                return locator_map["xpath"]
+            else:
+                return locator_map["css"]
+                
+        return ""

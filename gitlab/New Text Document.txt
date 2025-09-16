@@ -1,0 +1,64 @@
+selenium-recorder/
+│
+├── selenium_recorder/                # Main package
+│   ├── __init__.py                   # Package initialization
+│   │
+│   ├── ui/                           # UI components
+│   │   ├── __init__.py
+│   │   ├── main_window.py            # Main application window
+│   │   ├── toolbar.py                # Application toolbar
+│   │   ├── step_table.py             # Table for displaying steps
+│   │   ├── settings_panel.py         # Settings configuration panel
+│   │   ├── preview_panel.py          # Screenshot preview panel
+│   │   ├── log_panel.py              # Log display panel
+│   │   └── dialogs/                  # Dialog windows
+│   │       ├── __init__.py
+│   │       ├── settings_dialog.py    # Settings dialog
+│   │       └── about_dialog.py       # About dialog
+│   │
+│   ├── core/                         # Core functionality
+│   │   ├── __init__.py
+│   │   ├── browser_manager.py        # Browser control
+│   │   ├── recorder.py               # Recording functionality
+│   │   ├── playback_engine.py        # Playback functionality
+│   │   ├── script_generator.py       # Script generation
+│   │   ├── locator_engine.py         # Element locator generation
+│   │   ├── screenshot_manager.py     # Screenshot management
+│   │   └── config_manager.py         # Configuration management
+│   │
+│   ├── utils/                        # Utility functions
+│   │   ├── __init__.py
+│   │   ├── file_utils.py             # File operations
+│   │   ├── logging_utils.py          # Logging setup
+│   │   ├── browser_utils.py          # Browser-specific utilities
+│   │   ├── locator_utils.py          # Locator generation utilities
+│   │   ├── ui_utils.py               # UI-related utilities
+│   │   └── script_utils.py           # Script generation utilities
+│   │
+│   ├── resources/                    # Application resources
+│   │   ├── icons/                    # UI icons
+│   │   ├── js/                       # JavaScript files for injection
+│   │   │   └── recorder_injection.js # Browser injection script
+│   │   └── templates/                # Script templates
+│   │
+│   └── app.py                        # Application entry point
+│
+├── tests/                            # Test suite
+│   ├── __init__.py
+│   ├── test_browser_manager.py
+│   ├── test_recorder.py
+│   ├── test_playback_engine.py
+│   └── test_script_generator.py
+│
+├── screenshots/                      # Default screenshot directory
+│
+├── exports/                          # Default export directory
+│
+├── docs/                             # Documentation
+│   ├── user_guide.md
+│   └── developer_guide.md
+│
+├── requirements.txt                  # Python dependencies
+├── setup.py                          # Package setup script
+├── README.md                         # Project readme
+└── LICENSE                           # License file

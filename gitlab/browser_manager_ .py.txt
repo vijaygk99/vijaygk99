@@ -1,0 +1,395 @@
+"""
+browser_manager.py - Browser manager for Selenium Recorder
+
+This module handles browser automation using Selenium WebDriver,
+including starting/stopping browsers, navigation, and screenshots.
+"""
+
+import os
+import time
+import logging
+from datetime import datetime
+from typing import Dict, Any, Optional, Tuple
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.edge.options import Options as EdgeOptions
+from selenium.webdriver.safari.options import Options as SafariOptions
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import WebDriverException, TimeoutException, NoSuchElementException
+
+class BrowserManager:
+    """
+    Manager for browser automation using Selenium WebDriver.
+    """
+    
+    def __init__(self, config: Dict[str, Any] = None):
+        """
+        Initialize the browser manager.
+        
+        Args:
+            config: Browser configuration
+        """
+        self.config = config or {}
+        self.driver = None
+        self.browser_type = self.config.get("browser", {}).get("type", "chrome")
+        self.screenshot_dir = self.config.get("screenshot_dir", "screenshots")
+        
+        # Create screenshot directory if it doesn't exist
+        if not os.path.exists(self.screenshot_dir):
+            os.makedirs(self.screenshot_dir)
+            
+        # Initialize logger
+        self.logger = logging.getLogger("BrowserManager")
+        
+    def start_browser(self) -> bool:
+        """
+        Start the browser with the configured options.
+        
+        Returns:
+            True if browser started successfully, False otherwise
+        """
+        if self.driver:
+            self.logger.warning("Browser already started")
+            return True
+            
+        try:
+            browser_config = self.config.get("browser", {})
+            
+            # Get browser type
+            browser_type = browser_config.get("type", "chrome")
+            
+            # Get driver path
+            driver_path = browser_config.get("driver_path", "")
+            
+            # Get window size
+            window_width = browser_config.get("window_width", 1280)
+            window_height = browser_config.get("window_height", 800)
+            
+            # Get headless mode
+            headless = browser_config.get("headless", False)
+            
+            # Get user agent
+            user_agent = browser_config.get("user_agent", "")
+            
+            # Get additional options
+            additional_options = browser_config.get("additional_options", {})
+            
+            # Create driver based on browser type
+            if browser_type == "chrome":
+                self.driver = self._create_chrome_driver(driver_path, headless, user_agent, additional_options)
+            elif browser_type == "firefox":
+                self.driver = self._create_firefox_driver(driver_path, headless, user_agent, additional_options)
+            elif browser_type == "edge":
+                self.driver = self._create_edge_driver(driver_path, headless, user_agent, additional_options)
+            elif browser_type == "safari":
+                self.driver = self._create_safari_driver(driver_path, additional_options)
+            else:
+                self.logger.error(f"Unsupported browser type: {browser_type}")
+                return False
+                
+            # Set window size
+            self.driver.set_window_size(window_width, window_height)
+            
+            # Set implicit wait
+            self.driver.implicitly_wait(10)
+            
+            self.logger.info(f"Started {browser_type} browser")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error starting browser: {str(e)}")
+            return False
+            
+    def stop_browser(self) -> bool:
+        """
+        Stop the browser.
+        
+        Returns:
+            True if browser stopped successfully, False otherwise
+        """
+        if not self.driver:
+            self.logger.warning("Browser not started")
+            return True
+            
+        try:
+            self.driver.quit()
+            self.driver = None
+            self.logger.info("Stopped browser")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error stopping browser: {str(e)}")
+            return False
+            
+    def navigate(self, url: str) -> bool:
+        """
+        Navigate to a URL.
+        
+        Args:
+            url: URL to navigate to
+            
+        Returns:
+            True if navigation successful, False otherwise
+        """
+        if not self.driver:
+            self.logger.error("Browser not started")
+            return False
+            
+        try:
+            self.logger.info(f"Navigating to {url}")
+            self.driver.get(url)
+            return True
+        except Exception as e:
+            self.logger.error(f"Error navigating to {url}: {str(e)}")
+            return False
+            
+    def take_screenshot(self, name: str = None) -> Optional[str]:
+        """
+        Take a screenshot of the current browser window.
+        
+        Args:
+            name: Name for the screenshot file (optional)
+            
+        Returns:
+            Path to the screenshot file, or None if failed
+        """
+        if not self.driver:
+            self.logger.error("Browser not started")
+            return None
+            
+        try:
+            # Generate filename
+            if not name:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                name = f"screenshot_{timestamp}"
+                
+            # Ensure name has .png extension
+            if not name.endswith(".png"):
+                name = f"{name}.png"
+                
+            # Create full path
+            path = os.path.join(self.screenshot_dir, name)
+            
+            # Take screenshot
+            self.driver.save_screenshot(path)
+            self.logger.info(f"Screenshot saved to {path}")
+            
+            return path
+        except Exception as e:
+            self.logger.error(f"Error taking screenshot: {str(e)}")
+            return None
+            
+    def find_element(self, locator: Tuple[str, str], timeout: int = 10) -> Any:
+        """
+        Find an element using the given locator.
+        
+        Args:
+            locator: Tuple of (By, value)
+            timeout: Timeout in seconds
+            
+        Returns:
+            WebElement if found, None otherwise
+        """
+        if not self.driver:
+            self.logger.error("Browser not started")
+            return None
+            
+        try:
+            by, value = locator
+            element = WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located((by, value))
+            )
+            return element
+        except Exception as e:
+            self.logger.error(f"Error finding element {locator}: {str(e)}")
+            return None
+            
+    def execute_script(self, script: str, *args) -> Any:
+        """
+        Execute JavaScript in the browser.
+        
+        Args:
+            script: JavaScript to execute
+            args: Arguments to pass to the script
+            
+        Returns:
+            Result of the script execution
+        """
+        if not self.driver:
+            self.logger.error("Browser not started")
+            return None
+            
+        try:
+            return self.driver.execute_script(script, *args)
+        except Exception as e:
+            self.logger.error(f"Error executing script: {str(e)}")
+            return None
+            
+    def highlight_element(self, element, duration: float = 0.5):
+        """
+        Highlight an element in the browser.
+        
+        Args:
+            element: WebElement to highlight
+            duration: Duration of highlight in seconds
+        """
+        if not self.driver or not element:
+            return
+            
+        try:
+            # Store original style
+            original_style = element.get_attribute("style")
+            
+            # Apply highlight style
+            self.driver.execute_script(
+                "arguments[0].setAttribute('style', arguments[1]);",
+                element,
+                "border: 2px solid red; background-color: yellow;"
+            )
+            
+            # Wait for specified duration
+            time.sleep(duration)
+            
+            # Restore original style
+            self.driver.execute_script(
+                "arguments[0].setAttribute('style', arguments[1]);",
+                element,
+                original_style
+            )
+        except Exception as e:
+            self.logger.error(f"Error highlighting element: {str(e)}")
+            
+    def _create_chrome_driver(self, driver_path: str, headless: bool, user_agent: str, additional_options: Dict[str, Any]) -> webdriver.Chrome:
+        """
+        Create a Chrome WebDriver.
+        
+        Args:
+            driver_path: Path to ChromeDriver executable
+            headless: Whether to run in headless mode
+            user_agent: User agent string
+            additional_options: Additional Chrome options
+            
+        Returns:
+            Chrome WebDriver instance
+        """
+        options = ChromeOptions()
+        
+        # Set headless mode
+        if headless:
+            options.add_argument("--headless")
+            
+        # Set user agent
+        if user_agent:
+            options.add_argument(f"--user-agent={user_agent}")
+            
+        # Add additional options
+        for key, value in additional_options.items():
+            if isinstance(value, bool):
+                if value:
+                    options.add_argument(f"--{key}")
+            else:
+                options.add_argument(f"--{key}={value}")
+                
+        # Create driver
+        if driver_path:
+            return webdriver.Chrome(executable_path=driver_path, options=options)
+        else:
+            return webdriver.Chrome(options=options)
+            
+    def _create_firefox_driver(self, driver_path: str, headless: bool, user_agent: str, additional_options: Dict[str, Any]) -> webdriver.Firefox:
+        """
+        Create a Firefox WebDriver.
+        
+        Args:
+            driver_path: Path to GeckoDriver executable
+            headless: Whether to run in headless mode
+            user_agent: User agent string
+            additional_options: Additional Firefox options
+            
+        Returns:
+            Firefox WebDriver instance
+        """
+        options = FirefoxOptions()
+        
+        # Set headless mode
+        if headless:
+            options.add_argument("--headless")
+            
+        # Set user agent
+        if user_agent:
+            options.set_preference("general.useragent.override", user_agent)
+            
+        # Add additional options
+        for key, value in additional_options.items():
+            if isinstance(value, bool):
+                options.set_preference(key, value)
+            else:
+                options.set_preference(key, value)
+                
+        # Create driver
+        if driver_path:
+            return webdriver.Firefox(executable_path=driver_path, options=options)
+        else:
+            return webdriver.Firefox(options=options)
+            
+    def _create_edge_driver(self, driver_path: str, headless: bool, user_agent: str, additional_options: Dict[str, Any]) -> webdriver.Edge:
+        """
+        Create an Edge WebDriver.
+        
+        Args:
+            driver_path: Path to EdgeDriver executable
+            headless: Whether to run in headless mode
+            user_agent: User agent string
+            additional_options: Additional Edge options
+            
+        Returns:
+            Edge WebDriver instance
+        """
+        options = EdgeOptions()
+        
+        # Set headless mode
+        if headless:
+            options.add_argument("--headless")
+            
+        # Set user agent
+        if user_agent:
+            options.add_argument(f"--user-agent={user_agent}")
+            
+        # Add additional options
+        for key, value in additional_options.items():
+            if isinstance(value, bool):
+                if value:
+                    options.add_argument(f"--{key}")
+            else:
+                options.add_argument(f"--{key}={value}")
+                
+        # Create driver
+        if driver_path:
+            return webdriver.Edge(executable_path=driver_path, options=options)
+        else:
+            return webdriver.Edge(options=options)
+            
+    def _create_safari_driver(self, driver_path: str, additional_options: Dict[str, Any]) -> webdriver.Safari:
+        """
+        Create a Safari WebDriver.
+        
+        Args:
+            driver_path: Path to SafariDriver executable
+            additional_options: Additional Safari options
+            
+        Returns:
+            Safari WebDriver instance
+        """
+        options = SafariOptions()
+        
+        # Safari doesn't support many command-line options
+        # but we can set some capabilities
+        
+        # Create driver
+        if driver_path:
+            return webdriver.Safari(executable_path=driver_path, options=options)
+        else:
+            return webdriver.Safari(options=options)

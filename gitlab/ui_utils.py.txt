@@ -1,0 +1,310 @@
+"""
+ui_utils.py - UI utility functions for Selenium Recorder
+
+This module provides utility functions for UI-related operations.
+"""
+
+import os
+import sys
+import platform
+from typing import Dict, List, Any, Optional, Tuple
+import logging
+
+logger = logging.getLogger("UIUtils")
+
+class UIUtils:
+    """
+    Utility class for UI-related operations.
+    """
+    
+    @staticmethod
+    def get_system_theme() -> str:
+        """
+        Get the system theme (light or dark).
+        
+        Returns:
+            'light' or 'dark'
+        """
+        system = platform.system()
+        
+        if system == "Windows":
+            try:
+                import winreg
+                registry = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
+                key = winreg.OpenKey(registry, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                return "light" if value == 1 else "dark"
+            except Exception as e:
+                logger.error(f"Error getting Windows theme: {str(e)}")
+                return "light"
+                
+        elif system == "Darwin":  # macOS
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                    capture_output=True,
+                    text=True
+                )
+                return "dark" if result.stdout.strip() == "Dark" else "light"
+            except Exception as e:
+                logger.error(f"Error getting macOS theme: {str(e)}")
+                return "light"
+                
+        elif system == "Linux":
+            # Try to detect GNOME theme
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
+                    capture_output=True,
+                    text=True
+                )
+                theme = result.stdout.strip().lower()
+                return "dark" if "dark" in theme else "light"
+            except Exception as e:
+                logger.error(f"Error getting Linux theme: {str(e)}")
+                return "light"
+                
+        return "light"  # Default to light theme
+        
+    @staticmethod
+    def get_system_font() -> Tuple[str, int]:
+        """
+        Get the system font and size.
+        
+        Returns:
+            Tuple of (font_name, font_size)
+        """
+        system = platform.system()
+        
+        if system == "Windows":
+            try:
+                import winreg
+                registry = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
+                key = winreg.OpenKey(registry, r"Control Panel\Desktop\WindowMetrics")
+                # Convert Windows font size to points
+                value, _ = winreg.QueryValueEx(key, "AppliedDPI")
+                font_size = int(value * 0.75)
+                return ("Segoe UI", font_size)
+            except Exception as e:
+                logger.error(f"Error getting Windows font: {str(e)}")
+                return ("Segoe UI", 9)
+                
+        elif system == "Darwin":  # macOS
+            return ("SF Pro", 13)
+            
+        elif system == "Linux":
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["gsettings", "get", "org.gnome.desktop.interface", "font-name"],
+                    capture_output=True,
+                    text=True
+                )
+                font_str = result.stdout.strip().strip("'")
+                parts = font_str.rsplit(" ", 1)
+                if len(parts) == 2:
+                    font_name, font_size = parts
+                    return (font_name, int(float(font_size)))
+                else:
+                    return ("Ubuntu", 11)
+            except Exception as e:
+                logger.error(f"Error getting Linux font: {str(e)}")
+                return ("Ubuntu", 11)
+                
+        return ("Arial", 10)  # Default font
+        
+    @staticmethod
+    def get_app_icon_path() -> str:
+        """
+        Get the path to the application icon.
+        
+        Returns:
+            Path to icon file
+        """
+        # Get the directory of the current script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Navigate to the resources directory
+        resources_dir = os.path.join(os.path.dirname(current_dir), "resources", "icons")
+        
+        # Get system-specific icon
+        system = platform.system()
+        
+        if system == "Windows":
+            icon_path = os.path.join(resources_dir, "app_icon.ico")
+        elif system == "Darwin":  # macOS
+            icon_path = os.path.join(resources_dir, "app_icon.icns")
+        else:  # Linux and others
+            icon_path = os.path.join(resources_dir, "app_icon.png")
+            
+        # Check if icon exists, otherwise use default
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(resources_dir, "app_icon.png")
+            
+        return icon_path
+        
+    @staticmethod
+    def get_icon_path(icon_name: str) -> str:
+        """
+        Get the path to an icon.
+        
+        Args:
+            icon_name: Name of icon file (without extension)
+            
+        Returns:
+            Path to icon file
+        """
+        # Get the directory of the current script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Navigate to the resources directory
+        resources_dir = os.path.join(os.path.dirname(current_dir), "resources", "icons")
+        
+        # Try different extensions
+        extensions = [".png", ".svg", ".ico"]
+        
+        for ext in extensions:
+            icon_path = os.path.join(resources_dir, icon_name + ext)
+            if os.path.exists(icon_path):
+                return icon_path
+                
+        # Return default icon if not found
+        return os.path.join(resources_dir, "default_icon.png")
+        
+    @staticmethod
+    def get_ui_scale_factor() -> float:
+        """
+        Get the UI scale factor for high DPI displays.
+        
+        Returns:
+            Scale factor (1.0 for standard DPI)
+        """
+        system = platform.system()
+        
+        if system == "Windows":
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                return user32.GetDpiForSystem() / 96.0
+            except Exception as e:
+                logger.error(f"Error getting Windows DPI: {str(e)}")
+                return 1.0
+                
+        elif system == "Darwin":  # macOS
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["osascript", "-e", "tell application \"Finder\" to get bounds of window of desktop"],
+                    capture_output=True,
+                    text=True
+                )
+                bounds = result.stdout.strip().split(", ")
+                width = int(bounds[2])
+                # Estimate scale factor based on screen width
+                if width >= 2560:
+                    return 2.0
+                elif width >= 1920:
+                    return 1.5
+                else:
+                    return 1.0
+            except Exception as e:
+                logger.error(f"Error getting macOS DPI: {str(e)}")
+                return 1.0
+                
+        elif system == "Linux":
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["gsettings", "get", "org.gnome.desktop.interface", "scaling-factor"],
+                    capture_output=True,
+                    text=True
+                )
+                scale = int(result.stdout.strip())
+                return scale if scale > 0 else 1.0
+            except Exception as e:
+                logger.error(f"Error getting Linux DPI: {str(e)}")
+                return 1.0
+                
+        return 1.0  # Default scale factor
+        
+    @staticmethod
+    def format_time_duration(seconds: float) -> str:
+        """
+        Format a time duration in seconds to a human-readable string.
+        
+        Args:
+            seconds: Time duration in seconds
+            
+        Returns:
+            Formatted time string
+        """
+        if seconds < 0:
+            return "0s"
+            
+        if seconds < 1:
+            return f"{int(seconds * 1000)}ms"
+            
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+            
+        minutes = int(seconds / 60)
+        remaining_seconds = seconds % 60
+        
+        if minutes < 60:
+            return f"{minutes}m {int(remaining_seconds)}s"
+            
+        hours = int(minutes / 60)
+        remaining_minutes = minutes % 60
+        
+        return f"{hours}h {remaining_minutes}m {int(remaining_seconds)}s"
+        
+    @staticmethod
+    def truncate_text(text: str, max_length: int = 50, ellipsis: str = "...") -> str:
+        """
+        Truncate text to a maximum length.
+        
+        Args:
+            text: Text to truncate
+            max_length: Maximum length
+            ellipsis: Ellipsis string to append
+            
+        Returns:
+            Truncated text
+        """
+        if not text:
+            return ""
+            
+        if len(text) <= max_length:
+            return text
+            
+        return text[:max_length - len(ellipsis)] + ellipsis
+        
+    @staticmethod
+    def format_file_size(size_bytes: int) -> str:
+        """
+        Format a file size in bytes to a human-readable string.
+        
+        Args:
+            size_bytes: File size in bytes
+            
+        Returns:
+            Formatted size string
+        """
+        if size_bytes < 0:
+            return "0 B"
+            
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+            
+        size_kb = size_bytes / 1024
+        if size_kb < 1024:
+            return f"{size_kb:.1f} KB"
+            
+        size_mb = size_kb / 1024
+        if size_mb < 1024:
+            return f"{size_mb:.1f} MB"
+            
+        size_gb = size_mb / 1024
+        return f"{size_gb:.2f} GB"
